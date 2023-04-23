@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QDialog, QLineEdit, QTextEdit, QVBoxLayout, QHBoxL
 from PIL import Image
 
 
+
 class CommunicatorClient(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -31,14 +32,14 @@ class CommunicatorClient(QDialog):
         self.edit_line = QLineEdit()
         send_button = QPushButton("Send")
         send_button.clicked.connect(self.send_message)
-        upload_button = QPushButton("Upload Image")
-        upload_button.clicked.connect(self.convert_image)
+        # upload_button = QPushButton("Upload Image")
+        # upload_button.clicked.connect(self.convert_image)
 
         # Layout
         bottom_layout = QHBoxLayout()
         bottom_layout.addWidget(self.edit_line)
         bottom_layout.addWidget(send_button)
-        bottom_layout.addWidget(upload_button)
+        # bottom_layout.addWidget(upload_button)
         layout.addLayout(bottom_layout)
 
         self.setLayout(layout)
@@ -88,15 +89,22 @@ class CommunicatorClient(QDialog):
     def send_message(self):
         # save string
         message = self.edit_line.text()
-        # each letter written in ascii
-        message_pack = [bin(ord(letter)) for letter in message]
+        self.text_edit.append(f"Send: {message}")
 
+        # string with binary code
         package = self.prepare_data_to_send(message)
+
+        # string with spaces
+        rs232_display = ''
+
+        for i in range(0, len(package), 11):
+            rs232_display += package[i:i + 11] + ' '
 
         rs232_package = package.encode()
 
+        # send
         self.socket.send(rs232_package)
-        # self.text_edit.append(f"Me: {self.edit_line.text()}")
+        self.rs232_edit.append(f"Send: {rs232_display}")
         self.edit_line.clear()
 
     # upload image and convert to ASCII_art
@@ -140,6 +148,34 @@ class ReceiveThread(QThread):
         while True:
             try:
                 message = self.socket.recv(2020).decode()
-                self.parent().text_edit.append(message)
+                rs232_message = ''
+
+                # add spaces to binary code
+                for i in range(0, len(message), 11):
+                    rs232_message += message[i:i+11] + ' '
+                self.parent().rs232_edit.append(f'Received: {rs232_message}')
+
+                single_sings_code_list = [message[i:i + 11] for i in range(0, len(message), 11)]
+                received_message = ''
+                # Encode message
+                for code in single_sings_code_list:
+                    letter_code = code[1:9]
+                    letter = chr(int(letter_code, 2))
+                    received_message = received_message + letter
+
+                words = received_message.split()
+
+                censored_message = ''
+                for word in words:
+                    with open('profanity.txt', "r") as file:
+                        censored_word = word
+                        for line in file:
+                            if word in line:
+                                censored_word = '*' * len(word)
+                                break
+
+                    censored_message += censored_word + ' '
+
+                self.parent().text_edit.append(f'Received: {censored_message}')
             except socket.error:
                 break
