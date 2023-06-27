@@ -4,7 +4,6 @@ from PySide6 import QtGui
 from PySide6.QtCore import QThread
 from PySide6.QtWidgets import QDialog, QLineEdit, QTextEdit, QVBoxLayout, QHBoxLayout, QPushButton, \
     QFileDialog
-from PIL import Image
 
 
 
@@ -78,6 +77,9 @@ class CommunicatorClient(QDialog):
             if len(single_packet) < 8:
                 single_packet = '0' * (8 - len(single_packet)) + single_packet
 
+            # LSB to MSB
+            single_packet = single_packet[::-1]
+
             # add start stop bits
             single_packet = '0' + single_packet + '11'
 
@@ -85,6 +87,7 @@ class CommunicatorClient(QDialog):
             rs232_pack = rs232_pack + single_packet
 
         return rs232_pack
+
 
     def send_message(self):
         # save string
@@ -108,35 +111,35 @@ class CommunicatorClient(QDialog):
         self.edit_line.clear()
 
     # upload image and convert to ASCII_art
-    def convert_image(self):
-        filename, _ = QFileDialog.getOpenFileName(self, "Open Image File", ".", "Images (*.png *.jpg *.jpeg *.bmp)")
-        if filename:
-            image = Image.open(filename)
-
-            # resize the image
-            width, height = image.size
-            aspect_ratio = height / width
-            new_width = 100
-            new_height = aspect_ratio * new_width
-            image = image.resize((new_width, int(new_height)))
-
-            image = image.convert('L')
-
-            pixels = image.getdata()
-
-            # replace each pixel with a character from array
-            chars = ["B", "S", "#", "&", "@", "$", "%", "*", "!", ":", "."]
-            new_pixels = [chars[pixel // 25] for pixel in pixels]
-            new_pixels = ''.join(new_pixels)
-
-            # split string of chars into multiple strings of length equal to new width and create a list
-            new_pixels_count = len(new_pixels)
-            ascii_image = [new_pixels[index:index + new_width] for index in range(0, new_pixels_count, new_width)]
-            ascii_image = "\n".join(ascii_image)
-
-            message = ascii_image.encode()
-            self.socket.sendall(message)
-            self.text_edit.append("Me: [Image]")
+    # def convert_image(self):
+    #     filename, _ = QFileDialog.getOpenFileName(self, "Open Image File", ".", "Images (*.png *.jpg *.jpeg *.bmp)")
+    #     if filename:
+    #         image = Image.open(filename)
+    #
+    #         # resize the image
+    #         width, height = image.size
+    #         aspect_ratio = height / width
+    #         new_width = 100
+    #         new_height = aspect_ratio * new_width
+    #         image = image.resize((new_width, int(new_height)))
+    #
+    #         image = image.convert('L')
+    #
+    #         pixels = image.getdata()
+    #
+    #         # replace each pixel with a character from array
+    #         chars = ["B", "S", "#", "&", "@", "$", "%", "*", "!", ":", "."]
+    #         new_pixels = [chars[pixel // 25] for pixel in pixels]
+    #         new_pixels = ''.join(new_pixels)
+    #
+    #         # split string of chars into multiple strings of length equal to new width and create a list
+    #         new_pixels_count = len(new_pixels)
+    #         ascii_image = [new_pixels[index:index + new_width] for index in range(0, new_pixels_count, new_width)]
+    #         ascii_image = "\n".join(ascii_image)
+    #
+    #         message = ascii_image.encode()
+    #         self.socket.sendall(message)
+    #         self.text_edit.append("Me: [Image]")
 
 
 class ReceiveThread(QThread):
@@ -159,7 +162,11 @@ class ReceiveThread(QThread):
                 received_message = ''
                 # Encode message
                 for code in single_sings_code_list:
+                    # delete start stop bits
                     letter_code = code[1:9]
+                    # MSB to LSB
+                    letter_code = letter_code[::-1]
+                    # convert letter
                     letter = chr(int(letter_code, 2))
                     received_message = received_message + letter
 
@@ -167,10 +174,11 @@ class ReceiveThread(QThread):
 
                 censored_message = ''
                 for word in words:
-                    with open('profanity.txt', "r") as file:
+                    with open('badwords.txt', "r") as file:
                         censored_word = word
                         for line in file:
-                            if word in line:
+                            # word is the same as line (except '\n')
+                            if word == line[:-1]:
                                 censored_word = '*' * len(word)
                                 break
 
